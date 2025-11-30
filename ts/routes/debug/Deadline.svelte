@@ -27,6 +27,16 @@
   let requiredPerDay: number | null = null;
   let achievablePercent: number | null = null;
   let note = '';
+  let bgColor = '';
+  
+  // 每张卡片平均学习时间（分钟）。这是个简单的估算值，方便在 UI 中展示每日学习分钟数。
+  const MIN_PER_CARD = 2.3 / 30; // 来自示例：30 张卡约 2.3 分钟
+
+  function computeStudyMinutes(perDay: number | null) {
+    if (!perDay) return '-';
+    const mins = perDay * MIN_PER_CARD;
+    return `${Math.round(mins * 10) / 10} 分钟/天`;
+  }
 
   function load() {
     try {
@@ -103,22 +113,89 @@
   onMount(() => {
     load();
     compute();
+    // load and apply user background color (client-only)
+    try {
+      const stored = localStorage.getItem('anki_debug_bg_color_v1');
+      if (stored) {
+        bgColor = stored;
+        if (typeof document !== 'undefined') {
+          document.documentElement.style.setProperty('--user-bg', bgColor);
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
   });
+
+  // persist/apply when user picks a color
+  $: if (typeof window !== 'undefined') {
+    if (bgColor) {
+      try {
+        localStorage.setItem('anki_debug_bg_color_v1', bgColor);
+        document.documentElement.style.setProperty('--user-bg', bgColor);
+      } catch (e) {
+        // ignore
+      }
+    } else {
+      // if cleared, remove custom var so theme falls back
+      try { document.documentElement.style.removeProperty('--user-bg'); } catch (e) {}
+    }
+  }
 </script>
 
 <style>
-  .box { padding: 12px; border: 1px solid var(--border); border-radius: 6px; max-width: 720px; }
+  .box { padding: 12px; border: 1px solid var(--border); border-radius: 6px; max-width: 920px; }
   .row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
   label { font-weight:600; min-width:140px; }
   input[type="number"] { width:140px; }
   .muted { color:var(--muted); font-size:0.9em }
+
+  /* 对齐的 Deadlines 表格样式 */
+  .deadlines { margin-top:12px; border-radius:8px; overflow:hidden; }
+  .deadlines .header,
+  .deadlines .row {
+    display: grid;
+    grid-template-columns: 1.5fr 0.7fr 0.8fr 0.8fr 0.9fr 0.8fr;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 14px;
+    word-break: break-word;
+  }
+  .deadlines .header {
+    background: linear-gradient(90deg, rgba(0,0,0,0.03), rgba(0,0,0,0.01));
+    font-weight:700;
+    color: var(--fg);
+  }
+  .deadlines .row {
+    background: rgba(255,255,255,0.75);
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+  }
+  .deadlines .row:last-child { border-bottom: none; }
+  .deadlines .name { display:flex; flex-direction:column; gap:6px; }
+  .deadlines .small-muted { color: var(--muted); font-size:0.85em }
+
+  @media (max-width: 720px) {
+    .deadlines .header, .deadlines .row {
+      grid-template-columns: 1fr 0.9fr 0.9fr;
+      grid-auto-rows: auto;
+    }
+    .deadlines .header > :nth-child(n+4),
+    .deadlines .row > :nth-child(n+4) { display: none; }
+  }
 </style>
 
   <div style="display:flex; align-items:center; justify-content:space-between; max-width:720px; margin-bottom:8px;">
   <div></div>
   <div>
     <!-- Theme selector for quick testing -->
-    <ThemeSelector />
+      <div style="display:flex; gap:8px; align-items:center;">
+        <ThemeSelector />
+        <label style="display:flex; align-items:center; gap:6px; font-weight:600;">
+          背景色
+          <input type="color" bind:value={bgColor} title="选择页面背景色" style="width:36px; height:28px; padding:0; border:none; background:transparent;" />
+        </label>
+        <button on:click={() => { bgColor = ''; localStorage.removeItem('anki_debug_bg_color_v1'); }}>清除</button>
+      </div>
   </div>
 </div>
 
@@ -137,12 +214,28 @@
   </div>
 
   <hr />
+  <div class="deadlines" aria-live="polite">
+    <div class="header">
+      <div>名称</div>
+      <div>剩余天数</div>
+      <div>需学卡数</div>
+      <div>建议每日</div>
+      <div>预计每日学习时间</div>
+      <div>预计掌握率</div>
+    </div>
 
-  <div>
-    <div><strong>目标：</strong>{title || '-'} 截止：{deadline || '-'}</div>
-    <div class="muted">天数剩余：{daysRemaining === null ? '-' : daysRemaining}</div>
-    <div class="muted">建议每日最低复习：{requiredPerDay ?? '-'} 张</div>
-    <div class="muted">按当前节奏预计掌握：{achievablePercent ?? '-'}%</div>
-    <div style="margin-top:8px">{note}</div>
+    <div class="row">
+      <div class="name">
+        <div>{title || '-'}</div>
+        <div class="small-muted">截止：{deadline || '-'}</div>
+      </div>
+      <div>{daysRemaining === null ? '-' : daysRemaining}</div>
+      <div>{totalCards}</div>
+      <div>{requiredPerDay ?? '-'}</div>
+      <div>{requiredPerDay ? computeStudyMinutes(requiredPerDay) : '-'}</div>
+      <div>{achievablePercent ?? '-'}%</div>
+    </div>
   </div>
+
+  <div style="margin-top:8px" class="muted">{note}</div>
 </div>
